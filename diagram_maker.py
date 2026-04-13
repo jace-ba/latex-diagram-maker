@@ -90,7 +90,20 @@ class PVDiagram:
             to_remove_shading = [k for k, v in self.shadings.items() if pid in v.process_ids]
             for k in to_remove_shading:
                 self.delete_shading(k)
+            # Store points to check if they need removal
+            p1_id = self.processes[pid].p1.id
+            p2_id = self.processes[pid].p2.id
             del self.processes[pid]
+            
+            # Check if points are still used
+            for pt_id in (p1_id, p2_id):
+                used = False
+                for proc in self.processes.values():
+                    if proc.p1.id == pt_id or proc.p2.id == pt_id:
+                        used = True
+                        break
+                if not used and pt_id in self.points:
+                    del self.points[pt_id]
 
     def add_shading(self, type, process_ids, label=""):
         shd = PVShading(self.shading_counter, type, process_ids, label)
@@ -393,10 +406,24 @@ class PVApp:
 
         ctk.CTkLabel(self.left_scroll, text="Controls", font=ctk.CTkFont(size=20, weight="bold")).pack(pady=5)
         
+        def make_collapsible(title):
+            container = ctk.CTkFrame(self.left_scroll, fg_color="transparent")
+            container.pack(fill="x", padx=10, pady=5)
+            btn = ctk.CTkButton(container, text="▶  " + title, anchor="w", fg_color="gray30", hover_color="gray40")
+            btn.pack(fill="x")
+            content = ctk.CTkFrame(container)
+            def toggle():
+                if content.winfo_ismapped():
+                    content.pack_forget()
+                    btn.configure(text="▶  " + title)
+                else:
+                    content.pack(fill="x", pady=(5,0))
+                    btn.configure(text="▼  " + title)
+            btn.configure(command=toggle)
+            return content, toggle
+
         # Add Process
-        p_frame = ctk.CTkFrame(self.left_scroll)
-        p_frame.pack(fill="x", padx=10, pady=5)
-        ctk.CTkLabel(p_frame, text="Add Process").pack(anchor="w", padx=10, pady=(5,0))
+        p_frame, tog_p = make_collapsible("Add Process")
         
         self.proc_type_var = ctk.StringVar(value="Linear")
         proc_menu = ctk.CTkOptionMenu(p_frame, variable=self.proc_type_var, values=["Linear", "Isobaric", "Isochoric", "Isothermal", "Adiabatic"])
@@ -419,28 +446,10 @@ class PVApp:
         self.p_lbl_ent = ctk.CTkEntry(p_frame, placeholder_text="Process Label (optional)")
         self.p_lbl_ent.pack(fill="x", padx=10, pady=5)
 
-        ctk.CTkButton(p_frame, text="Add Process", command=self.add_process).pack(fill="x", padx=10, pady=5)
+        ctk.CTkButton(p_frame, text="Confirm", command=lambda: [self.add_process(), tog_p()]).pack(fill="x", padx=10, pady=5)
 
-        # Add Point manually
-        pt_frame = ctk.CTkFrame(self.left_scroll)
-        pt_frame.pack(fill="x", padx=10, pady=5)
-        ctk.CTkLabel(pt_frame, text="Add Point").pack(anchor="w", padx=10, pady=(5,0))
-        
-        pt_row = ctk.CTkFrame(pt_frame, fg_color="transparent")
-        pt_row.pack(fill="x", padx=5)
-        self.pt_v_ent = ctk.CTkEntry(pt_row, width=50, placeholder_text="V")
-        self.pt_v_ent.pack(side="left", padx=5, pady=5)
-        self.pt_p_ent = ctk.CTkEntry(pt_row, width=50, placeholder_text="P")
-        self.pt_p_ent.pack(side="left", padx=5, pady=5)
-        self.pt_lbl_ent = ctk.CTkEntry(pt_row, width=60, placeholder_text="Lbl")
-        self.pt_lbl_ent.pack(side="left", padx=5, pady=5)
-        
-        ctk.CTkButton(pt_frame, text="Add Point", command=self.add_point).pack(fill="x", padx=10, pady=5)
-
-        # Add Shading manually
-        shd_frame = ctk.CTkFrame(self.left_scroll)
-        shd_frame.pack(fill="x", padx=10, pady=5)
-        ctk.CTkLabel(shd_frame, text="Add Shading").pack(anchor="w", padx=10, pady=(5,0))
+        # Add Shading
+        shd_frame, tog_s = make_collapsible("Add Shading")
         
         self.shd_type_var = ctk.StringVar(value="Under Curve")
         shd_menu = ctk.CTkOptionMenu(shd_frame, variable=self.shd_type_var, values=["Under Curve", "Inside Cycle"])
@@ -452,12 +461,10 @@ class PVApp:
         self.shd_lbl_ent = ctk.CTkEntry(shd_frame, placeholder_text="Region Label (optional)")
         self.shd_lbl_ent.pack(fill="x", padx=10, pady=5)
         
-        ctk.CTkButton(shd_frame, text="Shade Region", command=self.add_shading).pack(fill="x", padx=10, pady=5)
+        ctk.CTkButton(shd_frame, text="Confirm", command=lambda: [self.add_shading(), tog_s()]).pack(fill="x", padx=10, pady=5)
 
         # Arbitrary Label
-        lbl_frame = ctk.CTkFrame(self.left_scroll)
-        lbl_frame.pack(fill="x", padx=10, pady=5)
-        ctk.CTkLabel(lbl_frame, text="Add Text Label").pack(anchor="w", padx=10, pady=(5,0))
+        lbl_frame, tog_l = make_collapsible("Add Text Label")
         
         lbl_row = ctk.CTkFrame(lbl_frame, fg_color="transparent")
         lbl_row.pack(fill="x", padx=5)
@@ -468,12 +475,10 @@ class PVApp:
         self.tl_txt_ent = ctk.CTkEntry(lbl_row, width=60, placeholder_text="Text")
         self.tl_txt_ent.pack(side="left", padx=5, pady=5)
         
-        ctk.CTkButton(lbl_frame, text="Add Label", command=self.add_text_label).pack(fill="x", padx=10, pady=5)
+        ctk.CTkButton(lbl_frame, text="Confirm", command=lambda: [self.add_text_label(), tog_l()]).pack(fill="x", padx=10, pady=5)
 
         # Set Units
-        units_frame = ctk.CTkFrame(self.left_scroll)
-        units_frame.pack(fill="x", padx=10, pady=5)
-        ctk.CTkLabel(units_frame, text="Units").pack(anchor="w", padx=10, pady=(5,0))
+        units_frame, tog_u = make_collapsible("Update Units")
         
         units_row = ctk.CTkFrame(units_frame, fg_color="transparent")
         units_row.pack(fill="x", padx=5)
@@ -482,7 +487,7 @@ class PVApp:
         self.unit_p_ent = ctk.CTkEntry(units_row, width=60, placeholder_text="Pr (atm)")
         self.unit_p_ent.pack(side="left", padx=5, pady=5)
         
-        ctk.CTkButton(units_frame, text="Update Units", command=self.update_units).pack(fill="x", padx=10, pady=5)
+        ctk.CTkButton(units_frame, text="Confirm", command=lambda: [self.update_units(), tog_u()]).pack(fill="x", padx=10, pady=5)
 
     def _setup_mid_pane(self):
         ctk.CTkLabel(self.mid_pane, text="Active Items", font=ctk.CTkFont(size=20, weight="bold")).pack(pady=10)
@@ -530,18 +535,6 @@ class PVApp:
         except ValueError:
             messagebox.showerror("Error", "Invalid numbers for Process")
 
-    def add_point(self):
-        try:
-            v = float(self.pt_v_ent.get())
-            p = float(self.pt_p_ent.get())
-            lbl = self.pt_lbl_ent.get()
-            self.diagram.add_point(v, p, lbl)
-            for widget in (self.pt_v_ent, self.pt_p_ent, self.pt_lbl_ent):
-                widget.delete(0, 'end')
-            self.update_ui()
-        except ValueError:
-            messagebox.showerror("Error", "Invalid numbers for Point")
-
     def add_shading(self):
         txt = self.shd_ent.get()
         if not txt:
@@ -588,43 +581,181 @@ class PVApp:
         for widget in self.scroll_frame.winfo_children():
             widget.destroy()
 
-        if self.diagram.points:
-            ctk.CTkLabel(self.scroll_frame, text="Points", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(5,0))
-            for pid, pt in self.diagram.points.items():
-                f = ctk.CTkFrame(self.scroll_frame)
-                f.pack(fill="x", pady=2)
-                ctk.CTkLabel(f, text=f"Pt {pt.label}: ({pt.v}, {pt.p})").pack(side="left", padx=5)
-                ctk.CTkButton(f, text="X", width=30, fg_color="red", hover_color="darkred", 
-                              command=lambda p=pid: self.delete_point(p)).pack(side="right", padx=5, pady=2)
+        def make_toggle(edit_frm, toggle_btn, base_text):
+            def toggle(event=None):
+                if edit_frm.winfo_ismapped():
+                    edit_frm.pack_forget()
+                    toggle_btn.configure(text="▶  " + base_text)
+                else:
+                    edit_frm.pack(fill="x", padx=5, pady=(0, 5))
+                    toggle_btn.configure(text="▼  " + base_text)
+            return toggle
 
         if self.diagram.processes:
             ctk.CTkLabel(self.scroll_frame, text="Processes", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(10,0))
-            for pid, proc in self.diagram.processes.items():
+            for pid, proc in list(self.diagram.processes.items()):
                 f = ctk.CTkFrame(self.scroll_frame)
                 f.pack(fill="x", pady=2)
-                ctk.CTkLabel(f, text=f"({pid}) {proc.type}: ({proc.p1.v}{self.diagram.unit_v}, {proc.p1.p}{self.diagram.unit_p}) -> \
-({proc.p2.v}{self.diagram.unit_v}, {proc.p2.p}{self.diagram.unit_p})").pack(side="left", padx=5)
-                ctk.CTkButton(f, text="X", width=30, fg_color="red", hover_color="darkred", 
-                              command=lambda p=pid: self.delete_process(p)).pack(side="right", padx=5, pady=2)
+                
+                header = ctk.CTkFrame(f, fg_color="transparent")
+                header.pack(fill="x")
+                
+                lbl_text = f"({pid}) {proc.type}: ({proc.p1.v}{self.diagram.unit_v}, {proc.p1.p}{self.diagram.unit_p}) -> ({proc.p2.v}{self.diagram.unit_v}, {proc.p2.p}{self.diagram.unit_p})"
+                
+                btn = ctk.CTkButton(header, text="▶  " + lbl_text, anchor="w", fg_color="gray30", hover_color="gray40")
+                btn.pack(side="left", fill="x", expand=True, padx=(5, 0), pady=5)
+                
+                edit_frame = ctk.CTkFrame(f)
+                tog = make_toggle(edit_frame, btn, lbl_text)
+                btn.configure(command=tog)
+                
+                ctk.CTkButton(header, text="X", width=30, fg_color="red", hover_color="darkred", 
+                              command=lambda p=pid: self.delete_process(p)).pack(side="right", padx=5, pady=5)
+                              
+                # Edit process form
+                row1 = ctk.CTkFrame(edit_frame, fg_color="transparent")
+                row1.pack(fill="x", padx=5, pady=(5, 0))
+                
+                v1_e = ctk.CTkEntry(row1, width=50)
+                v1_e.insert(0, str(proc.p1.v))
+                v1_e.pack(side="left", padx=2)
+                p1_e = ctk.CTkEntry(row1, width=50)
+                p1_e.insert(0, str(proc.p1.p))
+                p1_e.pack(side="left", padx=2)
+                
+                v2_e = ctk.CTkEntry(row1, width=50)
+                v2_e.insert(0, str(proc.p2.v))
+                v2_e.pack(side="left", padx=2)
+                p2_e = ctk.CTkEntry(row1, width=50)
+                p2_e.insert(0, str(proc.p2.p))
+                p2_e.pack(side="left", padx=2)
+                
+                row2 = ctk.CTkFrame(edit_frame, fg_color="transparent")
+                row2.pack(fill="x", padx=5, pady=5)
+                
+                type_v = ctk.StringVar(value=proc.type)
+                type_m = ctk.CTkOptionMenu(row2, variable=type_v, values=["Linear", "Isobaric", "Isochoric", "Isothermal", "Adiabatic"], width=90)
+                type_m.pack(side="left", padx=2)
+                
+                lbl_e = ctk.CTkEntry(row2, width=80, placeholder_text="Label")
+                if proc.label:
+                    lbl_e.insert(0, proc.label)
+                lbl_e.pack(side="left", padx=2)
+                
+                def update_proc(p_id=pid, v1_=v1_e, p1_=p1_e, v2_=v2_e, p2_=p2_e, t_=type_v, l_=lbl_e):
+                    try:
+                        p = self.diagram.processes[p_id]
+                        p.p1.v = float(v1_.get())
+                        p.p1.p = float(p1_.get())
+                        p.p2.v = float(v2_.get())
+                        p.p2.p = float(p2_.get())
+                        p.type = t_.get()
+                        p.label = l_.get()
+                        self.update_ui()
+                    except ValueError:
+                        pass
+                
+                ctk.CTkButton(row2, text="Save", width=50, command=update_proc).pack(side="left", padx=5)
 
         if hasattr(self.diagram, 'shadings') and self.diagram.shadings:
             ctk.CTkLabel(self.scroll_frame, text="Shadings", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(10,0))
-            for sid, shd in self.diagram.shadings.items():
+            for sid, shd in list(self.diagram.shadings.items()):
                 f = ctk.CTkFrame(self.scroll_frame)
                 f.pack(fill="x", pady=2)
+                
+                header = ctk.CTkFrame(f, fg_color="transparent")
+                header.pack(fill="x")
+                
                 proc_str = ",".join(map(str, shd.process_ids))
-                ctk.CTkLabel(f, text=f"[{shd.type}] Proc(s): {proc_str}").pack(side="left", padx=5)
-                ctk.CTkButton(f, text="X", width=30, fg_color="red", hover_color="darkred", 
+                lbl_text = f"[{shd.type}] Proc(s): {proc_str}"
+                
+                btn = ctk.CTkButton(header, text="▶  " + lbl_text, anchor="w", fg_color="gray30", hover_color="gray40")
+                btn.pack(side="left", fill="x", expand=True, padx=(5, 0), pady=2)
+                
+                edit_frame = ctk.CTkFrame(f)
+                tog = make_toggle(edit_frame, btn, lbl_text)
+                btn.configure(command=tog)
+                
+                ctk.CTkButton(header, text="X", width=30, fg_color="red", hover_color="darkred", 
                               command=lambda s=sid: self.delete_shading(s)).pack(side="right", padx=5, pady=2)
+                              
+                row1 = ctk.CTkFrame(edit_frame, fg_color="transparent")
+                row1.pack(fill="x", padx=5, pady=2)
+                
+                stype_v = ctk.StringVar(value=shd.type)
+                stype_m = ctk.CTkOptionMenu(row1, variable=stype_v, values=["Under Curve", "Inside Cycle"], width=110)
+                stype_m.pack(side="left", padx=2)
+                
+                pids_e = ctk.CTkEntry(row1, width=80)
+                pids_e.insert(0, proc_str)
+                pids_e.pack(side="left", padx=2)
+                
+                lbl_e = ctk.CTkEntry(row1, width=60, placeholder_text="Label")
+                if shd.label:
+                    lbl_e.insert(0, shd.label)
+                lbl_e.pack(side="left", padx=2)
+                
+                def update_shd(s_id=sid, st_=stype_v, pids_=pids_e, l_=lbl_e):
+                    try:
+                        s = self.diagram.shadings[s_id]
+                        new_pids = [int(x.strip()) for x in pids_.get().replace(',', ' ').split()]
+                        valid_pids = [x for x in new_pids if x in self.diagram.processes]
+                        if valid_pids:
+                            s.process_ids = valid_pids
+                            s.type = st_.get()
+                            s.label = l_.get()
+                            self.update_ui()
+                    except ValueError:
+                        pass
+
+                ctk.CTkButton(edit_frame, text="Save", width=50, command=update_shd).pack(side="left", padx=5, pady=(0,5))
 
         if hasattr(self.diagram, 'text_labels') and self.diagram.text_labels:
             ctk.CTkLabel(self.scroll_frame, text="Text Labels", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(10,0))
-            for lid, tlbl in self.diagram.text_labels.items():
+            for lid, tlbl in list(self.diagram.text_labels.items()):
                 f = ctk.CTkFrame(self.scroll_frame)
                 f.pack(fill="x", pady=2)
-                ctk.CTkLabel(f, text=f"'{tlbl.text}' at ({tlbl.v}{self.diagram.unit_v}, {tlbl.p}{self.diagram.unit_p})").pack(side="left", padx=5)
-                ctk.CTkButton(f, text="X", width=30, fg_color="red", hover_color="darkred", 
+                
+                header = ctk.CTkFrame(f, fg_color="transparent")
+                header.pack(fill="x")
+                
+                lbl_text = f"'{tlbl.text}' at ({tlbl.v}{self.diagram.unit_v}, {tlbl.p}{self.diagram.unit_p})"
+                btn = ctk.CTkButton(header, text="▶  " + lbl_text, anchor="w", fg_color="gray30", hover_color="gray40")
+                btn.pack(side="left", fill="x", expand=True, padx=(5, 0), pady=2)
+                
+                edit_frame = ctk.CTkFrame(f)
+                tog = make_toggle(edit_frame, btn, lbl_text)
+                btn.configure(command=tog)
+                
+                ctk.CTkButton(header, text="X", width=30, fg_color="red", hover_color="darkred", 
                               command=lambda l=lid: self.delete_text_label(l)).pack(side="right", padx=5, pady=2)
+                              
+                row1 = ctk.CTkFrame(edit_frame, fg_color="transparent")
+                row1.pack(fill="x", padx=5, pady=2)
+                
+                v_e = ctk.CTkEntry(row1, width=50)
+                v_e.insert(0, str(tlbl.v))
+                v_e.pack(side="left", padx=2)
+                
+                p_e = ctk.CTkEntry(row1, width=50)
+                p_e.insert(0, str(tlbl.p))
+                p_e.pack(side="left", padx=2)
+                
+                txt_e = ctk.CTkEntry(row1, width=80)
+                txt_e.insert(0, tlbl.text)
+                txt_e.pack(side="left", padx=2)
+                
+                def update_lbl(l_id=lid, v_=v_e, p_=p_e, t_=txt_e):
+                    try:
+                        l_obj = self.diagram.text_labels[l_id]
+                        l_obj.v = float(v_.get())
+                        l_obj.p = float(p_.get())
+                        l_obj.text = t_.get()
+                        self.update_ui()
+                    except ValueError:
+                        pass
+                        
+                ctk.CTkButton(edit_frame, text="Save", width=50, command=update_lbl).pack(side="left", padx=5, pady=(0,5))
                               
         # Update Calculator process list
         if hasattr(self, 'calc_panel'):
