@@ -288,41 +288,67 @@ class CalculatorPanel(ctk.CTkFrame):
         v1, p1 = proc.p1.v, proc.p1.p
         v2, p2 = proc.p2.v, proc.p2.p
         
+        up = self.diagram.unit_p
+        uv = self.diagram.unit_v
+        ue = rf"\text{{{up}}} \cdot \text{{{uv}}}"
+        
         W = 0
-        latex_eq = ""
+        latex_eq = []
         
         if proc.type == "Isochoric":
             W = 0
-            latex_eq = r"W &= \int P \, dV = 0"
+            latex_eq = [
+                r"W &= -\int P \, dV",
+                rf"  &= 0 \text{{ {ue}}}"
+            ]
         elif proc.type == "Isobaric":
-            W = p1 * (v2 - v1)
-            latex_eq = rf"W &= P \Delta V = {p1:.2f} \times ({v2:.2f} - {v1:.2f}) = {W:.2f}"
+            W = -p1 * (v2 - v1)
+            latex_eq = [
+                r"W &= -P \Delta V",
+                rf"  &= -({p1:.2f} \text{{ {up}}})({v2:.2f} - {v1:.2f} \text{{ {uv}}})",
+                rf"  &= {W:.2f} {ue}"
+            ]
         elif proc.type == "Isothermal":
-            W = p1 * v1 * np.log(v2 / v1) if v1 != 0 else 0
-            latex_eq = rf"W &= nRT \ln\left(\frac{{V_f}}{{V_i}}\right) = P_i V_i \ln\left(\frac{{V_f}}{{V_i}}\right) = {p1:.2f} \times {v1:.2f} \ln\left(\frac{{{v2:.2f}}}{{{v1:.2f}}}\right) = {W:.2f}"
+            W = -p1 * v1 * np.log(v2 / v1) if v1 != 0 else 0
+            latex_eq = [
+                r"W &= -nRT \ln\left(\frac{V_f}{V_i}\right)",
+                r"  &= -P_i V_i \ln\left(\frac{V_f}{V_i}\right)",
+                rf"  &= -({p1:.2f} \text{{ {up}}})({v1:.2f} \text{{ {uv}}}) \ln\left(\frac{{{v2:.2f}}}{{{v1:.2f}}}\right)",
+                rf"  &= {W:.2f} {ue}"
+            ]
         elif proc.type == "Adiabatic":
             gamma = 1.4
-            W = (p2 * v2 - p1 * v1) / (1 - gamma)
-            latex_eq = rf"W &= \frac{{P_f V_f - P_i V_i}}{{1 - \gamma}} = \frac{{{p2:.2f} \times {v2:.2f} - {p1:.2f} \times {v1:.2f}}}{{1 - 1.4}} = {W:.2f}"
+            W = -(p2 * v2 - p1 * v1) / (1 - gamma)
+            latex_eq = [
+                r"W &= -\frac{P_f V_f - P_i V_i}{1 - \gamma}",
+                rf"  &= -\frac{{({p2:.2f} \text{{ {up}}})({v2:.2f} \text{{ {uv}}}) - ({p1:.2f} \text{{ {up}}})({v1:.2f} \text{{ {uv}}})}}{{1 - 1.4}}",
+                rf"  &= {W:.2f} {ue}"
+            ]
         else: # Linear
-            W = 0.5 * (p1 + p2) * (v2 - v1)
-            latex_eq = rf"W &= \text{{Area under curve}} = \frac{{1}}{{2}}(P_i + P_f)(V_f - V_i) = \frac{{1}}{{2}}({p1:.2f} + {p2:.2f})({v2:.2f} - {v1:.2f}) = {W:.2f}"
+            W = -0.5 * (p1 + p2) * (v2 - v1)
+            latex_eq = [
+                r"W &= -\text{Area under curve}",
+                r"  &= -\frac{1}{2}(P_i + P_f)(V_f - V_i)",
+                rf"  &= -\frac{{1}}{{2}}({p1:.2f} + {p2:.2f} \text{{ {up}}})({v2:.2f} - {v1:.2f} \text{{ {uv}}})",
+                rf"  &= {W:.2f} {ue}"
+            ]
 
         # dE_th
         delta_E = (f / 2) * (p2 * v2 - p1 * v1)
-        Q = delta_E + W
+        Q = delta_E - W
         
         res_text = (f"Results for Process {pid}:\n\n"
-                    f"Work Done (W): {W:.3f}\n"
-                    f"Change in Thermal Energy (ΔE_th): {delta_E:.3f}\n"
-                    f"Heat Added (Q): {Q:.3f}")
+                    f"Work Done On System (W): {W:.3f} {up}*{uv}\n"
+                    f"Change in Thermal Energy (ΔE_th): {delta_E:.3f} {up}*{uv}\n"
+                    f"Heat Added (Q): {Q:.3f} {up}*{uv}")
         
         self.result_lbl.configure(text=res_text)
         
-        latex_str = (r"\begin{aligned}" + "\n"
-                     rf"    {latex_eq}" + "\n"
+        latex_eq_str = " \\\\\n    ".join(latex_eq)
+        latex_str = (r"\begin{aligned}" + "\n    "
+                     + latex_eq_str + "\n"
                      r"\end{aligned}" + "\n"
-                     rf"\boxed{{W = {W:.2f}}}")
+                     rf"\boxed{{W = {W:.2f} {ue}}}")
         self.latex_out.delete("0.0", "end")
         self.latex_out.insert("0.0", latex_str)
 
@@ -576,7 +602,8 @@ class PVApp:
             for pid, proc in self.diagram.processes.items():
                 f = ctk.CTkFrame(self.scroll_frame)
                 f.pack(fill="x", pady=2)
-                ctk.CTkLabel(f, text=f"({pid}) {proc.type}: {proc.p1.v}v->{proc.p2.v}v").pack(side="left", padx=5)
+                ctk.CTkLabel(f, text=f"({pid}) {proc.type}: ({proc.p1.v}{self.diagram.unit_v}, {proc.p1.p}{self.diagram.unit_p}) -> \
+({proc.p2.v}{self.diagram.unit_v}, {proc.p2.p}{self.diagram.unit_p})").pack(side="left", padx=5)
                 ctk.CTkButton(f, text="X", width=30, fg_color="red", hover_color="darkred", 
                               command=lambda p=pid: self.delete_process(p)).pack(side="right", padx=5, pady=2)
 
@@ -595,7 +622,7 @@ class PVApp:
             for lid, tlbl in self.diagram.text_labels.items():
                 f = ctk.CTkFrame(self.scroll_frame)
                 f.pack(fill="x", pady=2)
-                ctk.CTkLabel(f, text=f"'{tlbl.text}' at ({tlbl.v}, {tlbl.p})").pack(side="left", padx=5)
+                ctk.CTkLabel(f, text=f"'{tlbl.text}' at ({tlbl.v}{self.diagram.unit_v}, {tlbl.p}{self.diagram.unit_p})").pack(side="left", padx=5)
                 ctk.CTkButton(f, text="X", width=30, fg_color="red", hover_color="darkred", 
                               command=lambda l=lid: self.delete_text_label(l)).pack(side="right", padx=5, pady=2)
                               
