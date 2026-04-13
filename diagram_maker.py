@@ -220,6 +220,113 @@ class PVDiagram:
         return "\n".join(lines)
 
 
+class CalculatorPanel(ctk.CTkFrame):
+    def __init__(self, parent, diagram):
+        super().__init__(parent)
+        self.diagram = diagram
+        
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(2, weight=1)
+
+        # Process Selection
+        sel_frame = ctk.CTkFrame(self, fg_color="transparent")
+        sel_frame.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        
+        ctk.CTkLabel(sel_frame, text="Select Process:").pack(side="left", padx=5, pady=2)
+        
+        self.proc_var = ctk.StringVar()
+        self.proc_menu = ctk.CTkOptionMenu(sel_frame, variable=self.proc_var, values=["None"])
+        self.proc_menu.pack(side="left", padx=5, pady=2, fill="x", expand=True)
+
+        # Parameters
+        param_frame = ctk.CTkFrame(self, fg_color="transparent")
+        param_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+        
+        ctk.CTkLabel(param_frame, text="Degrees of Freedom (f):").grid(row=0, column=0, padx=5, pady=2, sticky="w")
+        self.f_var = ctk.StringVar(value="3")
+        self.f_entry = ctk.CTkEntry(param_frame, textvariable=self.f_var, width=50)
+        self.f_entry.grid(row=0, column=1, padx=5, pady=2, sticky="w")
+        
+        ctk.CTkButton(param_frame, text="Calculate", command=self.calculate, width=80).grid(row=0, column=2, padx=5, pady=2)
+
+        # Output
+        out_frame = ctk.CTkFrame(self, fg_color="transparent")
+        out_frame.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
+        
+        self.result_lbl = ctk.CTkLabel(out_frame, text="", justify="left", font=ctk.CTkFont(size=13))
+        self.result_lbl.pack(padx=5, pady=5, anchor="nw")
+        
+        ctk.CTkLabel(out_frame, text="LaTeX Output (Work):").pack(padx=5, pady=(5, 0), anchor="w")
+        self.latex_out = ctk.CTkTextbox(out_frame, height=100, font=ctk.CTkFont(family="Consolas", size=11))
+        self.latex_out.pack(padx=5, pady=2, fill="both", expand=True)
+
+        self.update_process_list()
+
+    def update_process_list(self):
+        proc_options = [f"Process {pid}: {p.type}" for pid, p in self.diagram.processes.items()]
+        if not proc_options:
+            proc_options = ["None"]
+        self.proc_menu.configure(values=proc_options)
+        if self.proc_var.get() not in proc_options:
+            self.proc_var.set(proc_options[0])
+
+    def calculate(self):
+        sel_val = self.proc_var.get()
+        if sel_val == "None" or not sel_val:
+            return
+            
+        pid = int(sel_val.split(":")[0].replace("Process ", ""))
+        proc = self.diagram.processes.get(pid)
+        if not proc:
+            return
+
+        try:
+            f = float(self.f_var.get())
+        except ValueError:
+            f = 3.0
+
+        v1, p1 = proc.p1.v, proc.p1.p
+        v2, p2 = proc.p2.v, proc.p2.p
+        
+        W = 0
+        latex_eq = ""
+        
+        if proc.type == "Isochoric":
+            W = 0
+            latex_eq = r"W &= \int P \, dV = 0"
+        elif proc.type == "Isobaric":
+            W = p1 * (v2 - v1)
+            latex_eq = rf"W &= P \Delta V = {p1:.2f} \times ({v2:.2f} - {v1:.2f}) = {W:.2f}"
+        elif proc.type == "Isothermal":
+            W = p1 * v1 * np.log(v2 / v1) if v1 != 0 else 0
+            latex_eq = rf"W &= nRT \ln\left(\frac{{V_f}}{{V_i}}\right) = P_i V_i \ln\left(\frac{{V_f}}{{V_i}}\right) = {p1:.2f} \times {v1:.2f} \ln\left(\frac{{{v2:.2f}}}{{{v1:.2f}}}\right) = {W:.2f}"
+        elif proc.type == "Adiabatic":
+            gamma = 1.4
+            W = (p2 * v2 - p1 * v1) / (1 - gamma)
+            latex_eq = rf"W &= \frac{{P_f V_f - P_i V_i}}{{1 - \gamma}} = \frac{{{p2:.2f} \times {v2:.2f} - {p1:.2f} \times {v1:.2f}}}{{1 - 1.4}} = {W:.2f}"
+        else: # Linear
+            W = 0.5 * (p1 + p2) * (v2 - v1)
+            latex_eq = rf"W &= \text{{Area under curve}} = \frac{{1}}{{2}}(P_i + P_f)(V_f - V_i) = \frac{{1}}{{2}}({p1:.2f} + {p2:.2f})({v2:.2f} - {v1:.2f}) = {W:.2f}"
+
+        # dE_th
+        delta_E = (f / 2) * (p2 * v2 - p1 * v1)
+        Q = delta_E + W
+        
+        res_text = (f"Results for Process {pid}:\n\n"
+                    f"Work Done (W): {W:.3f}\n"
+                    f"Change in Thermal Energy (ΔE_th): {delta_E:.3f}\n"
+                    f"Heat Added (Q): {Q:.3f}")
+        
+        self.result_lbl.configure(text=res_text)
+        
+        latex_str = (r"\begin{aligned}" + "\n"
+                     rf"    {latex_eq}" + "\n"
+                     r"\end{aligned}" + "\n"
+                     rf"\boxed{{W = {W:.2f}}}")
+        self.latex_out.delete("0.0", "end")
+        self.latex_out.insert("0.0", latex_str)
+
+
 class PVApp:
     def __init__(self, root):
         self.diagram = PVDiagram()
@@ -357,6 +464,10 @@ class PVApp:
         self.scroll_frame = ctk.CTkScrollableFrame(self.mid_pane)
         self.scroll_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
+        ctk.CTkLabel(self.mid_pane, text="Calculator", font=ctk.CTkFont(size=20, weight="bold")).pack(pady=(10, 0))
+        self.calc_panel = CalculatorPanel(self.mid_pane, self.diagram)
+        self.calc_panel.pack(fill="both", expand=True, padx=10, pady=10)
+
     def _setup_right_pane(self):
         self.fig, self.ax = plt.subplots(figsize=(5, 4))
         self.ax.set_xlabel("V (L)")
@@ -487,6 +598,10 @@ class PVApp:
                 ctk.CTkLabel(f, text=f"'{tlbl.text}' at ({tlbl.v}, {tlbl.p})").pack(side="left", padx=5)
                 ctk.CTkButton(f, text="X", width=30, fg_color="red", hover_color="darkred", 
                               command=lambda l=lid: self.delete_text_label(l)).pack(side="right", padx=5, pady=2)
+                              
+        # Update Calculator process list
+        if hasattr(self, 'calc_panel'):
+            self.calc_panel.update_process_list()
 
         self.update_plot()
         self.output.delete("0.0", "end")
